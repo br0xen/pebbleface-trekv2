@@ -68,17 +68,19 @@ var imageId = {
 
 var options = JSON.parse(localStorage.getItem('options'));
 //console.log('read options: ' + JSON.stringify(options));
-if (options === null) options = { "use_gps" : "true",
-                                  "location" : "",
-                                  "units" : "fahrenheit",
-                                  "status" : "false",
-                                  "format" : "",
-                                  "language" : "",
-									"weatherstatus" : "false",
-									"bluetoothvibe" : "false",
-									"hourlyvibe" : "false",
-									"ampmsecs" : "false",
-                                  "invert" : "false" };
+if (options === null) options = { 
+    "use_gps" : "true",
+    "location" : "",
+    "units" : "fahrenheit",
+    "status" : "false",
+    "format" : "",
+    "language" : "",
+    "weatherstatus" : "false",
+    "bluetoothvibe" : "false",
+    "hourlyvibe" : "false",
+    "ampmsecs" : "false",
+    "invert" : "false"
+};
 
 function getWeatherFromLatLong(latitude, longitude) {
   var response;
@@ -131,7 +133,7 @@ function getWeatherFromLocation(location_name) {
 function getWeatherFromWoeid(woeid) {
   var celsius = options['units'] == 'celsius';
   var query = encodeURI("select item.condition from weather.forecast where woeid = " + woeid +
-                        " and u = " + (celsius ? "\"c\"" : "\"f\""));
+                        " and u = \"c\"");
   var url = "http://query.yahooapis.com/v1/public/yql?q=" + query + "&format=json";
 
   var response;
@@ -143,22 +145,24 @@ function getWeatherFromWoeid(woeid) {
         response = JSON.parse(req.responseText);
         if (response) {
           var condition = response.query.results.channel.item.condition;
-          temperature = condition.temp + (celsius ? "\u00B0" : "\u00B0");
+          temperature_c = condition.temp + "\u00B0";
+          temperature_f = parseInt(condition.temp * 1.8 + 32) + "\u00B0";
           icon = imageId[condition.code];
           // console.log("temp " + temperature);
           // console.log("icon " + icon);
           // console.log("condition " + condition.text);
           Pebble.sendAppMessage({
             "icon" : icon,
-            "temperature" : temperature,
+            "temperature_c" : temperature_c,
+            "temperature_f" : temperature_f,
             "invert" : (options["invert"] == "true" ? 1 : 0),  		
-			"status" : (options["status"] == "true" ? 0 : 1 ),
-			"weatherstatus" : (options["weatherstatus"] == "true" ? 1 : 0 ),
-			"bluetoothvibe" : (options["bluetoothvibe"] == "true" ? 1 : 0 ),
-			"hourlyvibe" : (options["hourlyvibe"] == "true" ? 1 : 0 ),
-			"ampmsecs" : (options["ampmsecs"] == "true" ? 1 : 0 ),
-			"format" : options["format"],
-			"language" : options["language"],
+            "status" : (options["status"] == "true" ? 0 : 1 ),
+            "weatherstatus" : (options["weatherstatus"] == "true" ? 1 : 0 ),
+            "bluetoothvibe" : (options["bluetoothvibe"] == "true" ? 1 : 0 ),
+            "hourlyvibe" : (options["hourlyvibe"] == "true" ? 1 : 0 ),
+            "ampmsecs" : (options["ampmsecs"] == "true" ? 1 : 0 ),
+            "format" : options["format"],
+            "language" : options["language"],
           });
         }
       } else {
@@ -171,9 +175,11 @@ function getWeatherFromWoeid(woeid) {
 
 function updateWeather() {
   if (options['use_gps'] == "true") {
-    window.navigator.geolocation.getCurrentPosition(locationSuccess,
-                                                    locationError,
-                                                    locationOptions);
+    window.navigator.geolocation.getCurrentPosition(
+        locationSuccess,
+        locationError,
+        locationOptions
+    );
   } else {
     getWeatherFromLocation(options["location"]);
   }
@@ -230,6 +236,6 @@ Pebble.addEventListener("ready", function(e) {
   setInterval(function() {
     //console.log("timer fired");
     updateWeather();
-  }, 1800000); // 30 minutes
+  }, 900000); // 15 minutes
   console.log(e.type);
 });

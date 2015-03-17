@@ -36,17 +36,19 @@ enum settingKeys {
   SETTING_LANGUAGE_KEY = 0x1,
   SETTING_FORMAT_KEY = 0x2,
   SETTING_INVERT_KEY = 0x3,
-  SETTING_TEMPERATURE_KEY = 0x4,
+  SETTING_TEMPERATURE_C_KEY = 0x4,
   SETTING_ICON_KEY = 0x5,
   SETTING_WEATHERSTATUS_KEY = 0x6,
   BLUETOOTHVIBE_KEY = 0x7,
   HOURLYVIBE_KEY = 0x8,
   SECS_KEY = 0x9,
+  SETTING_TEMPERATURE_F_KEY = 0xA,
 };
 
 BitmapLayer *icon_layer;
 GBitmap *icon_bitmap = NULL;
-TextLayer *temp_layer;
+TextLayer *temp_layer_1;
+TextLayer *temp_layer_2;
 static int hourlyvibe;
 
 static bool appStarted = false;
@@ -80,21 +82,22 @@ static uint8_t        sync_buffer[256];
 GRect TIME_RECT      = ConstantGRect(  29,   4, 110,  72 );
 GRect AMPM_RECT      = ConstantGRect( 122,   0,  22,  22 );
 GRect SECS_RECT      = ConstantGRect( 124,  -1,  24,  24 );
-GRect DATE_RECT      = ConstantGRect(  11, 132,  80,  50 );
-GRect WEEK_RECT      = ConstantGRect(  72, 132,  92,  50 );
-GRect DAYS_RECT      = ConstantGRect(  17,  94, 140,  30 );
+GRect DATE_RECT      = ConstantGRect(  52, 132,  82,  50 );
+GRect WEEK_RECT      = ConstantGRect(  11, 132,  80,  50 );
+GRect DAYS_RECT      = ConstantGRect(  19,  94, 140,  30 );
 GRect BATT_RECT      = ConstantGRect(  20,  79, 103,  17 );
 GRect BT_RECT        = ConstantGRect( 127,  78,  17,  20 );
 GRect EMPTY_RECT     = ConstantGRect(   0,   0,   0,   0 );
 GRect OFF_DATE_RECT  = ConstantGRect(  12, 132, 144,  70 );
 GRect OFF_WEEK_RECT  = ConstantGRect(  74, 132, 144,  70 );
 
-GRect TEMP_RECT      = ConstantGRect(   18,  53, 40,  40);
+GRect TEMP_1_RECT    = ConstantGRect(   18,  36, 40,  40);
+GRect TEMP_2_RECT    = ConstantGRect(   18,  53, 40,  40);
 GRect ICON_RECT      = ConstantGRect(   16,  21, 20,  20);
 
 
 // Define placeholders for time and date
-static char time_text[] = "00:00";
+static char time_text[] = "0000";
 static char ampm_text[] = "XXX";
 static char secs_text[] = "00";
 
@@ -246,11 +249,6 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
   #endif
 
   strftime( date_text, sizeof( date_text ), date_formats[current_language], tick_time );
-  if ( current_language == LANG_EN ) {
-    strcat( date_text, ordinal_numbers[tick_time->tm_mday - 1] );
-  } else {
-    strcat( date_text, month_names_arr[current_language][tick_time->tm_mon] );
-  }
   text_layer_set_text( text_date_layer, date_text );
 
   // Update week or day of the year (i.e. Week 15 or 2013-118)
@@ -263,7 +261,7 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
   }
 
   // Display hours (i.e. 18 or 06)
-  strftime( time_text, sizeof( time_text ), clock_is_24h_style() ? "%H:%M" : "%I:%M", tick_time );
+  strftime( time_text, sizeof( time_text ), clock_is_24h_style() ? "%H%M" : "%I%M", tick_time );
 
   // Remove leading zero (only in 12h-mode)
   if ( !clock_is_24h_style() && (time_text[0] == '0') ) {
@@ -272,7 +270,7 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
   text_layer_set_text( text_time_layer, time_text );
 
   // Update AM/PM indicator (i.e. AM or PM or nothing when using 24-hour style)
-  strftime( ampm_text, sizeof( ampm_text ), clock_is_24h_style() ? "24H" : "%p", tick_time );
+  strftime( ampm_text, sizeof( ampm_text ), clock_is_24h_style() ? "   " : "%p", tick_time );
   text_layer_set_text( text_ampm_layer, ampm_text );
 
   // Display seconds 
@@ -344,15 +342,20 @@ static void tuple_changed_callback( const uint32_t key, const Tuple* tuple_new, 
       bitmap_layer_set_bitmap(icon_layer, icon_bitmap);
       break;
 	  
-    case SETTING_TEMPERATURE_KEY:
-      text_layer_set_text(temp_layer, tuple_new->value->cstring);
+  case SETTING_TEMPERATURE_C_KEY:
+      text_layer_set_text(temp_layer_1, tuple_new->value->cstring);
+      break;
+
+  case SETTING_TEMPERATURE_F_KEY:
+      text_layer_set_text(temp_layer_2, tuple_new->value->cstring);
       break;
 	  
 	case SETTING_WEATHERSTATUS_KEY:
       persist_write_int( SETTING_WEATHERSTATUS_KEY, value );
       weather_status = value;
 
-      layer_set_frame( text_layer_get_layer( temp_layer ), ( weather_status == WEATHER_ON ) ? TEMP_RECT : EMPTY_RECT );
+      layer_set_frame( text_layer_get_layer( temp_layer_1 ), ( weather_status == WEATHER_ON ) ? TEMP_1_RECT : EMPTY_RECT );
+      layer_set_frame( text_layer_get_layer( temp_layer_2 ), ( weather_status == WEATHER_ON ) ? TEMP_2_RECT : EMPTY_RECT );
       layer_set_frame( bitmap_layer_get_layer( icon_layer ), ( weather_status == WEATHER_ON ) ? ICON_RECT : EMPTY_RECT );
 
       break;
@@ -369,20 +372,19 @@ static void tuple_changed_callback( const uint32_t key, const Tuple* tuple_new, 
 	  
 	case SECS_KEY:
 	  persist_write_int( SECS_KEY, value );
-      secs_status = value;
+    secs_status = value;
 	  
-	  	   if(secs_status) {
-			layer_set_hidden(text_layer_get_layer(text_secs_layer), false);
-	 		layer_set_hidden(text_layer_get_layer(text_ampm_layer), true);
-	    	tick_timer_service_subscribe(SECOND_UNIT, handle_tick);
-   	   }
-       else {
-		   	layer_set_hidden(text_layer_get_layer(text_secs_layer), true);
-	    	layer_set_hidden(text_layer_get_layer(text_ampm_layer), false);
-	    	tick_timer_service_subscribe(MINUTE_UNIT, handle_tick);
-      }
-	  
-      break;
+     if(secs_status) {
+       layer_set_hidden(text_layer_get_layer(text_secs_layer), false);
+       layer_set_hidden(text_layer_get_layer(text_ampm_layer), true);
+       tick_timer_service_subscribe(SECOND_UNIT, handle_tick);
+     } else {
+      layer_set_hidden(text_layer_get_layer(text_secs_layer), true);
+      layer_set_hidden(text_layer_get_layer(text_ampm_layer), false);
+      tick_timer_service_subscribe(MINUTE_UNIT, handle_tick);
+    }
+  
+    break;
   }
   // Refresh display
   update_time();
@@ -481,17 +483,20 @@ void handle_init( void ) {
   layer_add_child( window_layer, bitmap_layer_get_layer( background_layer ) );
 
   // Initial settings
-  Tuplet initial_values[] = { TupletInteger( SETTING_STATUS_KEY, current_status )
+  Tuplet initial_values[] = { 
+                  TupletInteger( SETTING_STATUS_KEY, current_status )
 	  						, TupletInteger( SETTING_WEATHERSTATUS_KEY, weather_status )
-                            , TupletInteger( SETTING_LANGUAGE_KEY, current_language )
-                            , TupletInteger( SETTING_FORMAT_KEY, current_format )
-                            , TupletInteger( SETTING_INVERT_KEY, invert_format )
-                            , TupletInteger( BLUETOOTHVIBE_KEY, bluetoothvibe_status )
-                            , TupletInteger( HOURLYVIBE_KEY, hourlyvibe_status )
-                            , TupletInteger( SECS_KEY, secs_status )
-							, TupletInteger( SETTING_ICON_KEY, (uint8_t) 14)
-                            , TupletCString( SETTING_TEMPERATURE_KEY, "")
-                            };
+                , TupletInteger( SETTING_LANGUAGE_KEY, current_language )
+                , TupletInteger( SETTING_FORMAT_KEY, current_format )
+                , TupletInteger( SETTING_INVERT_KEY, invert_format )
+                , TupletInteger( BLUETOOTHVIBE_KEY, bluetoothvibe_status )
+                , TupletInteger( HOURLYVIBE_KEY, hourlyvibe_status )
+                , TupletInteger( SECS_KEY, secs_status )
+							  , TupletInteger( SETTING_ICON_KEY, (uint8_t) 14)
+                , TupletCString( SETTING_TEMPERATURE_C_KEY, "")
+							  , TupletInteger( SETTING_ICON_KEY, (uint8_t) 14)
+                , TupletCString( SETTING_TEMPERATURE_F_KEY, "")
+  };
 
   // Open AppMessage to transfers
   app_message_open( 256	, 256 );
@@ -538,7 +543,7 @@ void handle_init( void ) {
 
   // Setup date layer
   text_date_layer = setup_text_layer( ( current_status == STATUS_ON ) ? DATE_RECT : OFF_DATE_RECT
-                                    , GTextAlignmentLeft
+                                    , GTextAlignmentRight
                                     , font_date );
   layer_add_child( window_layer, text_layer_get_layer( text_date_layer ) );
 
@@ -557,11 +562,18 @@ void handle_init( void ) {
 //  icon_layer = bitmap_layer_create( ICON_RECT );
   layer_add_child(weather_holder, bitmap_layer_get_layer(icon_layer));
 
-   temp_layer = setup_text_layer( ( weather_status == WEATHER_ON ) ? TEMP_RECT : EMPTY_RECT
-	                            , GTextAlignmentLeft
-                                , font_days );
-  //temp_layer = setup_text_layer( TEMP_RECT, GTextAlignmentLeft, font_days );
-  layer_add_child(weather_holder, text_layer_get_layer(temp_layer));
+   temp_layer_1 = setup_text_layer(
+        ( weather_status == WEATHER_ON ) ? TEMP_1_RECT : EMPTY_RECT
+	      , GTextAlignmentLeft
+        , font_days
+    );
+   temp_layer_2 = setup_text_layer( 
+        ( weather_status == WEATHER_ON ) ? TEMP_2_RECT : EMPTY_RECT
+        , GTextAlignmentLeft
+        , font_days 
+    );
+  layer_add_child(weather_holder, text_layer_get_layer(temp_layer_1));
+  layer_add_child(weather_holder, text_layer_get_layer(temp_layer_2));
 
   // Setup battery layer
   battery_layer = bitmap_layer_create( ( current_status == STATUS_ON ) ? BATT_RECT : EMPTY_RECT );
@@ -621,7 +633,8 @@ void handle_deinit( void ) {
   text_layer_destroy( text_days_layer );
   text_layer_destroy( text_date_layer );
   text_layer_destroy( text_week_layer );
-  text_layer_destroy( temp_layer );
+  text_layer_destroy( temp_layer_1 );
+  text_layer_destroy( temp_layer_2 );
 
   // Destroy inverter layer
   inverter_layer_destroy( currentDayLayer );
