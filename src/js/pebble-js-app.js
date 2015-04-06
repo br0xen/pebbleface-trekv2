@@ -236,6 +236,6 @@ Pebble.addEventListener("ready", function(e) {
   setInterval(function() {
     //console.log("timer fired");
     updateWeather();
-  }, 900000); // 15 minutes
+  }, 300000); // 5 minutes
   console.log(e.type);
 });
